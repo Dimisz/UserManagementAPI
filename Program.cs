@@ -1,41 +1,69 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
+
 var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
-
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// In-memory user store
+var users = new Dictionary<int, AppUser>
 {
-    app.MapOpenApi();
-}
-
-app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
+  [1] = new AppUser { Id = 1, FirstName = "Alice", LastName = "Smith", Email = "alice@example.com" },
+  [2] = new AppUser { Id = 2, FirstName = "Bob", LastName = "Johnson", Email = "bob@example.com" },
+  [3] = new AppUser { Id = 3, FirstName = "Charlie", LastName = "Brown", Email = "charlie@example.com" }
 };
 
-app.MapGet("/weatherforecast", () =>
+// GET all users
+app.MapGet("/api/users", () => Results.Ok(users.Values));
+
+// GET user by ID
+app.MapGet("/api/users/{id:int}", (int id) =>
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+  return users.TryGetValue(id, out var user)
+      ? Results.Ok(user)
+      : Results.NotFound($"User with ID {id} not found.");
+});
+
+// POST create user
+app.MapPost("/api/users", (AppUser user) =>
+{
+  if (users.ContainsKey(user.Id))
+    return Results.Conflict($"User with ID {user.Id} already exists.");
+
+  users[user.Id] = user;
+  return Results.Created($"/api/users/{user.Id}", user);
+});
+
+// PUT update user
+app.MapPut("/api/users/{id:int}", (int id, AppUser updatedUser) =>
+{
+  if (!users.ContainsKey(id))
+    return Results.NotFound($"User with ID {id} not found.");
+
+  users[id] = updatedUser;
+  return Results.NoContent();
+});
+
+// DELETE user
+app.MapDelete("/api/users/{id:int}", (int id) =>
+{
+  if (!users.Remove(id))
+    return Results.NotFound($"User with ID {id} not found.");
+
+  return Results.NoContent();
+});
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+public class AppUser
 {
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+  public int Id { get; set; }
+  public required string FirstName { get; set; }
+  public required string LastName { get; set; }
+  public required string Email { get; set; }
 }
+
+
+
+
+
